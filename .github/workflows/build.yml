@@ -40,6 +40,25 @@ jobs:
           set -o pipefail
           gradle assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee build.log
 
+      - name: Rename APK
+        if: success()
+        run: cp app/build/outputs/apk/debug/app-debug.apk Taskbar-debug.apk
+
+      - name: Publish APK to GitHub Release
+        if: success() && github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="Автоматическая отладочная сборка из коммита ${GITHUB_SHA:0:7}.
+          Скачайте файл **Taskbar-debug.apk** ниже и установите на телефон
+          (разрешите установку из этого источника)."
+          gh release create ci-latest Taskbar-debug.apk \
+            --title "Taskbar — последняя сборка" \
+            --notes "$NOTES" \
+            --target "$GITHUB_SHA" \
+            || gh release upload ci-latest Taskbar-debug.apk --clobber
+          gh release edit ci-latest --notes "$NOTES"
+
       - name: Publish error report to repository
         if: failure()
         run: |
@@ -66,10 +85,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload APK
+      - name: Upload APK artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
