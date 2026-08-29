@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,26 +39,37 @@ jobs:
         run: |
           set -o pipefail
           gradle assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee build.log
-        continue-on-error: true
 
-      - name: Prepare error report (if failed)
+      - name: Publish error report to repository
         if: failure()
         run: |
           {
-            echo '## ❌ Build failed'
-            echo ''
-            echo '### Kotlin / Gradle errors'
+            echo "## Build failed"
+            echo
+            echo "Commit: ${GITHUB_SHA}"
+            echo
+            echo "### Kotlin / Gradle errors"
             echo '```'
-            grep -nE "^e: |error: |FAILURE:|What went wrong|> Task .*FAILED|Unresolved|Expecting|Cannot|Caused by" build.log | tail -80
+            grep -nE "^e: |error: |FAILURE:|What went wrong|> Task .*FAILED|Unresolved|Expecting|Cannot|Caused by" build.log | tail -120 || echo "(no matches)"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "---- report prepared ----"
+            echo
+            echo "### Tail of log"
+            echo '```'
+            tail -n 160 build.log
+            echo '```'
+          } > build-report.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build-report.md
+          git commit -m "CI: build error report [skip ci]" || { echo "nothing to commit"; exit 0; }
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:${GITHUB_REF_NAME}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload build log on failure
-        if: failure()
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          name: build-log
-          path: build.log
-          if-no-files-found: warn
+          name: app-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
