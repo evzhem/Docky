@@ -15,6 +15,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -154,9 +155,19 @@ class TaskbarService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
-                startForegroundCompat()
+                // Сначала переводим службу в foreground
+                try {
+                    startForegroundCompat()
+                } catch (t: Throwable) {
+                    Log.e(TAG, "startForeground не удался", t)
+                    toast("Taskbar: не удалось запустить службу — ${t.javaClass.simpleName}: ${t.message}")
+                    updateNotification("Ошибка службы: ${t.message}", error = true)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 // Без разрешения на оверлей сервис работать не может
                 if (!Settings.canDrawOverlays(this)) {
+                    toast("Taskbar: нет разрешения «Поверх других приложений»")
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -180,19 +191,46 @@ class TaskbarService : Service() {
 
     private fun showBar() {
         if (barView != null) return
-        val owner = ServiceLayoutOwner()
-        val view = createComposeView(owner) {
-            TaskbarBar(
-                state = overlay,
-                onOpenMenu = { openDrawer() },
-                onLaunchApp = { launchFromOverlay(it) },
-                onDrag = { dx, dy -> moveBar(dx, dy) }
-            )
+        try {
+            val owner = ServiceLayoutOwner()
+            val view = createComposeView(owner) {
+                TaskbarBar(
+                    state = overlay,
+                    onOpenMenu = { openDrawer() },
+                    onLaunchApp = { launchFromOverlay(it) },
+                    onDrag = { dx, dy -> moveBar(dx, dy) }
+                )
+            }
+            windowManager.addView(view, barLayoutParams(overlay.position))
+            barView = view
+            barOwner = owner
+            Log.i(TAG, "Панель Taskbar добавлена в WindowManager")
+            toast("Taskbar включён: панель внизу экрана")
+            updateNotification("Панель Taskbar активна", error = false)
+        } catch (t: Throwable) {
+            // Самая частая причина: addView/ComposeView бросают исключение
+            Log.e(TAG, "Не удалось добавить панель", t)
+            val msg = "${t.javaClass.simpleName}: ${t.message}"
+            toast("Taskbar: панель не показана — $msg")
+            updateNotification("Ошибка панели: $msg", error = true)
         }
-        runCatching { windowManager.addView(view, barLayoutParams(overlay.position)) }
-            .onFailure { Log.e(TAG, "Не удалось добавить панель", it) }
-        barView = view
-        barOwner = owner
+    }
+
+    /** Toast на главном потоке. */
+    private fun toast(message: String) {
+        android.os.Handler(mainLooper).post {
+            runCatching { Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    /** Обновляет текст уведомления службы (виден даже без оверлея). */
+    private fun updateNotification(text: String, error: Boolean) {
+        try {
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(NOTIFICATION_ID, buildNotification(text))
+        } catch (t: Throwable) {
+            Log.e(TAG, "Не удалось обновить уведомление", t)
+        }
     }
 
     private fun rebuildBar() {
@@ -246,7 +284,10 @@ class TaskbarService : Service() {
             title = "TaskbarDrawer"
         }
         runCatching { windowManager.addView(view, params) }
-            .onFailure { Log.e(TAG, "Не удалось открыть меню", it) }
+            .onFailure {
+                Log.e(TAG, "Не удалось открыть меню", it)
+                toast("Taskbar: меню не открылось — ${it.javaClass.simpleName}: ${it.message}")
+            }
         drawerView = view
         drawerOwner = owner
     }
@@ -374,7 +415,7 @@ class TaskbarService : Service() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(text: String = "Панель Taskbar активна"): Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             0,
@@ -391,7 +432,8 @@ class TaskbarService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_taskbar)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("Панель Taskbar активна")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
             .setContentIntent(openIntent)
             .addAction(R.drawable.ic_stat_taskbar, "Остановить", stopIntent)
