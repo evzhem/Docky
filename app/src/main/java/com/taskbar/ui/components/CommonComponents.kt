@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -58,7 +63,7 @@ fun TaskbarHeader(
     ) {
         if (onBack != null) {
             HeaderIcon(
-                icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
                 description = "Назад",
                 onClick = onBack
             )
@@ -76,7 +81,7 @@ fun TaskbarHeader(
 
         if (onHelp != null) {
             HeaderIcon(
-                icon = androidx.compose.material.icons.Icons.Filled.HelpOutline,
+                icon = Icons.Filled.HelpOutline,
                 description = "Справка",
                 onClick = onHelp
             )
@@ -84,9 +89,9 @@ fun TaskbarHeader(
 
         HeaderIcon(
             icon = if (isFullscreen) {
-                androidx.compose.material.icons.Icons.Filled.FullscreenExit
+                Icons.Filled.FullscreenExit
             } else {
-                androidx.compose.material.icons.Icons.Filled.Fullscreen
+                Icons.Filled.Fullscreen
             },
             description = if (isFullscreen) "Оконный режим" else "На весь экран",
             onClick = onToggleFullscreen

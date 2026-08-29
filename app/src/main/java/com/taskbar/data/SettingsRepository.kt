@@ -145,8 +145,10 @@ class SettingsRepository(private val context: Context) {
         it[SettingsKeys.windowHeightKey(packageName)] = height
     }
 
-    private suspend fun edit(block: MutablePreferences.() -> Unit) {
-        context.taskbarDataStore.edit { preferences -> preferences.block() }
+    // ВАЖНО: лямбда получает MutablePreferences как параметр `it`
+    // (поэтому во всех сеттерах используется `it[KEY] = ...`).
+    private suspend fun edit(block: suspend (MutablePreferences) -> Unit) {
+        context.taskbarDataStore.edit { preferences -> block(preferences) }
     }
 }
 
